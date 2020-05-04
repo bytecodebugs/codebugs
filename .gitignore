@@ -39,3 +39,4 @@ _book
 *.pdf
 
 .idea
+go.sum
