@@ -3,9 +3,6 @@ package prepare
 import "github.com/kataras/iris/v12"
 
 func Service(router Router, address string) error {
-	if err := Init(); err != nil {
-		panic(err)
-	}
 	app := iris.New()
 	router.Init(app)
 	if err := app.Listen(address, iris.WithoutServerError(iris.ErrServerClosed), iris.WithConfiguration(iris.Configuration{

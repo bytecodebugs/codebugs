@@ -1,7 +1,6 @@
 package log
 
 import (
-	"codebugs/config"
 	"fmt"
 	"github.com/fluent/fluent-logger-golang/fluent"
 	"go.uber.org/zap"
@@ -20,7 +19,30 @@ func NewLogger(logger *zap.Logger) Logger {
 	return Logger{logger}
 }
 
-func Init() error {
+type FileLogCfg struct {
+	Enabled  bool          `json:"enabled"`
+	Filename string        `json:"filename"`
+	Level    zapcore.Level `json:"level"`
+}
+type SentryLogCfg struct {
+	Enabled bool          `json:"enabled"`
+	DSN     string        `json:"dsn"`
+	Level   zapcore.Level `json:"level"`
+}
+
+type FluentLogCfg struct {
+	Enabled bool          `json:"enabled"`
+	Level   zapcore.Level `json:"level"`
+	Config  fluent.Config `json:"config"`
+}
+
+type Config interface {
+	FileLog() *FileLogCfg
+	SentryLog() *SentryLogCfg
+	FluentLog() *FluentLogCfg
+}
+
+func Init(cfg Config) error {
 	zapCfg := zap.NewProductionConfig()
 	zapCfg.Sampling = nil
 	zapLogger, err := zapCfg.Build()
@@ -29,33 +51,25 @@ func Init() error {
 	}
 	productionEncoder := zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig())
 	var cores []zapcore.Core
-	fileLog := config.Config.Log.FileLog
-	if fileLog.Enabled {
-		fileLogger := NewFileLogger(fileLog.Filename)
+	if cfg.FileLog().Enabled {
+		fileLogger := NewFileLogger(cfg.FileLog().Filename)
 		fileOut := zapcore.AddSync(fileLogger)
-		fileCore := zapcore.NewCore(productionEncoder, fileOut, zapcore.InfoLevel)
+		fileCore := zapcore.NewCore(productionEncoder, fileOut, cfg.FileLog().Level)
 		cores = append(cores, fileCore)
 	}
-	sentryLog := config.Config.Log.SentryLog
-	if sentryLog.Enabled {
+	if cfg.SentryLog().Enabled {
 		sentryCore, err := NewSentryCore(
-			sentryLog.DSN,
-			zapcore.WarnLevel,
+			cfg.SentryLog().DSN,
+			cfg.SentryLog().Level,
 		)
 		if err != nil {
 			return fmt.Errorf("sentry logger init error %q", err)
 		}
 		cores = append(cores, sentryCore)
 	}
-	fluentLog := config.Config.Log.FluentLog
-	if fluentLog.Enabled {
-		fluentCore, err := NewFluentCore(fluent.Config{
-			FluentPort:    fluentLog.Port,
-			FluentHost:    fluentLog.Host,
-			Async:         true,
-			TagPrefix:     fluentLog.Prefix,
-			MarshalAsJSON: true,
-		}, zapcore.InfoLevel)
+
+	if cfg.FluentLog().Enabled {
+		fluentCore, err := NewFluentCore(cfg.FluentLog().Config, cfg.FluentLog().Level)
 		if err != nil {
 			return fmt.Errorf("fluent logger init error %q", err)
 		}
