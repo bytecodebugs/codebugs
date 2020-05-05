@@ -1,5 +1,0 @@
-package prepare
-
-func Worker() {
-
-}
