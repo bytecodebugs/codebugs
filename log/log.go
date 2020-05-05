@@ -36,13 +36,16 @@ type FluentLogCfg struct {
 	Config  fluent.Config `json:"config"`
 }
 
-type Config interface {
-	FileLog() *FileLogCfg
-	SentryLog() *SentryLogCfg
-	FluentLog() *FluentLogCfg
+type Config struct {
+	FileLog   *FileLogCfg
+	SentryLog *SentryLogCfg
+	FluentLog *FluentLogCfg
 }
 
-func Init(cfg Config) error {
+func Init(cfg *Config) error {
+	if cfg == nil {
+		return fmt.Errorf("log config can not be nil")
+	}
 	zapCfg := zap.NewProductionConfig()
 	zapCfg.Sampling = nil
 	zapLogger, err := zapCfg.Build()
@@ -51,16 +54,16 @@ func Init(cfg Config) error {
 	}
 	productionEncoder := zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig())
 	var cores []zapcore.Core
-	if cfg.FileLog().Enabled {
-		fileLogger := NewFileLogger(cfg.FileLog().Filename)
+	if cfg.FileLog.Enabled {
+		fileLogger := NewFileLogger(cfg.FileLog.Filename)
 		fileOut := zapcore.AddSync(fileLogger)
-		fileCore := zapcore.NewCore(productionEncoder, fileOut, cfg.FileLog().Level)
+		fileCore := zapcore.NewCore(productionEncoder, fileOut, cfg.FileLog.Level)
 		cores = append(cores, fileCore)
 	}
-	if cfg.SentryLog().Enabled {
+	if cfg.SentryLog.Enabled {
 		sentryCore, err := NewSentryCore(
-			cfg.SentryLog().DSN,
-			cfg.SentryLog().Level,
+			cfg.SentryLog.DSN,
+			cfg.SentryLog.Level,
 		)
 		if err != nil {
 			return fmt.Errorf("sentry logger init error %q", err)
@@ -68,8 +71,8 @@ func Init(cfg Config) error {
 		cores = append(cores, sentryCore)
 	}
 
-	if cfg.FluentLog().Enabled {
-		fluentCore, err := NewFluentCore(cfg.FluentLog().Config, cfg.FluentLog().Level)
+	if cfg.FluentLog.Enabled {
+		fluentCore, err := NewFluentCore(cfg.FluentLog.Config, cfg.FluentLog.Level)
 		if err != nil {
 			return fmt.Errorf("fluent logger init error %q", err)
 		}
