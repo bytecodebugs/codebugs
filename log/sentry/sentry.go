@@ -1,4 +1,4 @@
-package log
+package sentry
 
 import (
 	"github.com/getsentry/raven-go"
@@ -10,42 +10,42 @@ const (
 	traceSkipFrames   = 2
 )
 
-func NewSentryCore(dsn string, enabler zapcore.LevelEnabler) (zapcore.Core, error) {
+func New(dsn string, enabler zapcore.LevelEnabler) (zapcore.Core, error) {
 	client, err := raven.New(dsn)
 	if err != nil {
 		return zapcore.NewNopCore(), err
 	}
-	return &SentryCore{
+	return &Logger{
 		LevelEnabler: enabler,
 		client:       client,
 		fields:       make(map[string]interface{}),
 	}, nil
 }
 
-type SentryCore struct {
+type Logger struct {
 	zapcore.LevelEnabler
 	client *raven.Client
 	fields map[string]interface{}
 }
 
-func (core *SentryCore) With(fields []zapcore.Field) zapcore.Core {
+func (core *Logger) With(fields []zapcore.Field) zapcore.Core {
 	return core.with(fields)
 }
 
-func (core *SentryCore) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
+func (core *Logger) Check(ent zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
 	if core.Enabled(ent.Level) {
 		return ce.AddCore(ent, core)
 	}
 	return ce
 }
 
-func (core *SentryCore) Write(ent zapcore.Entry, fields []zapcore.Field) error {
+func (core *Logger) Write(ent zapcore.Entry, fields []zapcore.Field) error {
 	clone := core.with(fields)
 
 	packet := &raven.Packet{
 		Message:   ent.Message,
 		Timestamp: raven.Timestamp(ent.Time),
-		Level:     ravenSeverity(ent.Level),
+		Level:     convertSeverity(ent.Level),
 		Platform:  "Golang",
 		Extra:     clone.fields,
 	}
@@ -64,12 +64,12 @@ func (core *SentryCore) Write(ent zapcore.Entry, fields []zapcore.Field) error {
 	return nil
 }
 
-func (core *SentryCore) Sync() error {
+func (core *Logger) Sync() error {
 	core.client.Wait()
 	return nil
 }
 
-func (core *SentryCore) with(fields []zapcore.Field) *SentryCore {
+func (core *Logger) with(fields []zapcore.Field) *Logger {
 	m := make(map[string]interface{}, len(core.fields))
 	for k, v := range core.fields {
 		m[k] = v
@@ -86,14 +86,14 @@ func (core *SentryCore) with(fields []zapcore.Field) *SentryCore {
 		m[k] = v
 	}
 
-	return &SentryCore{
+	return &Logger{
 		LevelEnabler: core.LevelEnabler,
 		client:       core.client,
 		fields:       m,
 	}
 }
 
-func ravenSeverity(lvl zapcore.Level) raven.Severity {
+func convertSeverity(lvl zapcore.Level) raven.Severity {
 	switch lvl {
 	case zapcore.DebugLevel:
 		return raven.INFO

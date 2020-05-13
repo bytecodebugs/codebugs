@@ -1,4 +1,4 @@
-package log
+package file
 
 import (
 	"fmt"
@@ -7,19 +7,19 @@ import (
 	"sync"
 )
 
-// FileLogger is an io.WriteCloser that writes to the specified filename.
-type FileLogger struct {
+// Logger is an io.WriteCloser that writes to the specified filename.
+type Logger struct {
 	Filename string
 	mu       sync.Mutex
 	file     *os.File
 }
 
-func NewFileLogger(filename string) *FileLogger {
-	return &FileLogger{Filename: filename}
+func New(filename string) *Logger {
+	return &Logger{Filename: filename}
 }
 
 // Write implements io.Writer.
-func (logger *FileLogger) Write(p []byte) (n int, err error) {
+func (logger *Logger) Write(p []byte) (n int, err error) {
 	logger.mu.Lock()
 	defer logger.mu.Unlock()
 
@@ -32,14 +32,14 @@ func (logger *FileLogger) Write(p []byte) (n int, err error) {
 	n, err = logger.file.Write(p)
 	return n, err
 }
-func (logger *FileLogger) Sync() error {
+func (logger *Logger) Sync() error {
 	logger.mu.Lock()
 	defer logger.mu.Unlock()
 	return logger.file.Sync()
 }
 
 // Reopen implements io.Closer, and reopens the current logfile by simply closing it.
-func (logger *FileLogger) Reopen() error {
+func (logger *Logger) Reopen() error {
 	logger.mu.Lock()
 	defer logger.mu.Unlock()
 	return logger.close()
@@ -47,7 +47,7 @@ func (logger *FileLogger) Reopen() error {
 
 // openExistingOrNew opens the logfile if it exists. If there is no such file,
 // a new file is created. Must be called when l.mu mutex is acquired.
-func (logger *FileLogger) openExistingOrNew() error {
+func (logger *Logger) openExistingOrNew() error {
 	_, err := os.Stat(logger.Filename)
 	if os.IsNotExist(err) {
 		return logger.openNew()
@@ -68,7 +68,7 @@ func (logger *FileLogger) openExistingOrNew() error {
 
 // openNew opens a new log file for writing, moving any old log file out of the
 // way. This methods assumes the file has already been closed.
-func (logger *FileLogger) openNew() error {
+func (logger *Logger) openNew() error {
 	err := os.MkdirAll(logger.dir(), 0755)
 	fmt.Println(logger.dir())
 	if err != nil {
@@ -88,12 +88,12 @@ func (logger *FileLogger) openNew() error {
 }
 
 // dir returns the directory for the current filename.
-func (logger *FileLogger) dir() string {
+func (logger *Logger) dir() string {
 	return filepath.Dir(logger.Filename)
 }
 
 // close closes the file if it is open. Must be called when l.mu mutex is acquired.
-func (logger *FileLogger) close() error {
+func (logger *Logger) close() error {
 	if logger.file == nil {
 		return nil
 	}

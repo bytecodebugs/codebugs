@@ -1,45 +1,40 @@
 package log
 
 import (
+	"codebugs/log/file"
+	"codebugs/log/fluent"
+	"codebugs/log/sentry"
 	"fmt"
-	"github.com/fluent/fluent-logger-golang/fluent"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 var (
-	logger Logger
+	logger *zap.Logger
 )
 
-type Logger struct {
-	*zap.Logger
-}
-
-func NewLogger(logger *zap.Logger) Logger {
-	return Logger{logger}
-}
-
-type FileLogCfg struct {
+type FileCfg struct {
 	Enabled  bool          `json:"enabled"`
-	Filename string        `json:"filename"`
 	Level    zapcore.Level `json:"level"`
-}
-type SentryLogCfg struct {
-	Enabled bool          `json:"enabled"`
-	DSN     string        `json:"dsn"`
-	Level   zapcore.Level `json:"level"`
+	Filename string        `json:"filename"`
 }
 
-type FluentLogCfg struct {
+type SentryCfg struct {
+	Enabled bool          `json:"enabled"`
+	Level   zapcore.Level `json:"level"`
+	DSN     string        `json:"dsn"`
+}
+
+type FluentCfg struct {
 	Enabled bool          `json:"enabled"`
 	Level   zapcore.Level `json:"level"`
 	Config  fluent.Config `json:"config"`
 }
 
 type Config struct {
-	FileLog   *FileLogCfg
-	SentryLog *SentryLogCfg
-	FluentLog *FluentLogCfg
+	FileLog   *FileCfg
+	SentryLog *SentryCfg
+	FluentLog *FluentCfg
 }
 
 func Init(cfg *Config) error {
@@ -55,13 +50,13 @@ func Init(cfg *Config) error {
 	productionEncoder := zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig())
 	var cores []zapcore.Core
 	if cfg.FileLog.Enabled {
-		fileLogger := NewFileLogger(cfg.FileLog.Filename)
+		fileLogger := file.New(cfg.FileLog.Filename)
 		fileOut := zapcore.AddSync(fileLogger)
 		fileCore := zapcore.NewCore(productionEncoder, fileOut, cfg.FileLog.Level)
 		cores = append(cores, fileCore)
 	}
 	if cfg.SentryLog.Enabled {
-		sentryCore, err := NewSentryCore(
+		sentryCore, err := sentry.New(
 			cfg.SentryLog.DSN,
 			cfg.SentryLog.Level,
 		)
@@ -72,7 +67,7 @@ func Init(cfg *Config) error {
 	}
 
 	if cfg.FluentLog.Enabled {
-		fluentCore, err := NewFluentCore(cfg.FluentLog.Config, cfg.FluentLog.Level)
+		fluentCore, err := fluent.New(cfg.FluentLog.Config, cfg.FluentLog.Level)
 		if err != nil {
 			return fmt.Errorf("fluent logger init error %q", err)
 		}
@@ -84,21 +79,10 @@ func Init(cfg *Config) error {
 			return zapcore.NewTee(cores...)
 		}),
 	)
-	logger = NewLogger(zapLogger)
+	logger = zapLogger
 	return nil
 }
 
-// Reopen log file when necessary.
-// With creates a child logger and adds structured context to it.
-func (logger Logger) With(fields ...zap.Field) Logger {
-	return Logger{logger.Logger.With(fields...)}
-}
-
-// Named adds a new path segment to the logger's name.
-func (logger Logger) Named(name string) Logger {
-	return Logger{logger.Logger.Named(name)}
-}
-
-func Log() Logger {
+func Log() *zap.Logger {
 	return logger
 }
